@@ -1,5 +1,30 @@
 import time
 import socket
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.exc import IntegrityError
+
+engine = create_engine("sqlite:///data.db")
+Session = sessionmaker(bind=engine)
+s = Session()
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Player(Base):
+    __tablename__ = "gamers"
+    name = Column(String, primary_key=True)
+    password = Column(String(30))
+    score = Column(Integer, default=0)
+
+    def __init__(self, name, password):
+        self.name = name
+        self.password = password
+
+
+Base.metadata.create_all(bind=engine)
 
 def find(info: str):
     first = None
@@ -35,6 +60,19 @@ while server_works:
             data = sock.recv(1024).decode()
             data = find(data)
             print("Получил", data)
-        except:
-            pass
+            if data:
+                player = Player(data[0], data[1])
+                s.add(player)
+                s.commit()
+                sock.send("<0>".encode())
+        except IntegrityError:
+            s.rollback()
+            player = s.get(Player, data[0])
+            if data[1] == player.password:
+                print("Вход в игру выполнен")
+                sock.send(f"<{player.score}>".encode())
+            else:
+                print("Неверный пароль")
+                sock.send("<-1>".encode())
+                break
     time.sleep(1)
